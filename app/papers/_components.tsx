@@ -2,8 +2,7 @@
 
 import { useState } from "react"
 import { join } from "path"
-import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useSearchParams } from "next/navigation"
 
 import { PaginationNav } from "@/components/PaginationNav"
 import PaperPreviewRow from "@/components/PaperPreviewRow"
@@ -25,16 +24,26 @@ type PapersPageProps = {
   options: FilterOptions
 }
 
+// Function to get initial filter values - used both for SSR and CSR
+function getInitialFilters(searchParams: URLSearchParams) {
+  return {
+    year: searchParams.get("year") || "",
+    author: searchParams.get("author") || "",
+    tag: searchParams.get("tag") || ""
+  }
+}
+
 export function PapersPage({ allPapers, options }: PapersPageProps) {
-  const router = useRouter()
   const searchParams = useSearchParams()
-
-  // Get filter values from URL query parameters
-  const yearFilter = searchParams.get("year") || ""
-  const authorFilter = searchParams.get("author") || ""
-  const tagFilter = searchParams.get("tag") || ""
-
-  // Client-side pagination state
+  
+  // Initialize filter values from URL at component initialization
+  // This ensures first render matches the URL both server-side and client-side
+  const initialFilters = getInitialFilters(searchParams as unknown as URLSearchParams)
+  
+  // Use URL values for initial state to avoid flash of unfiltered content
+  const [yearFilter, setYearFilter] = useState(initialFilters.year)
+  const [authorFilter, setAuthorFilter] = useState(initialFilters.author)
+  const [tagFilter, setTagFilter] = useState(initialFilters.tag)
   const [currentPage, setCurrentPage] = useState(1)
 
   const { years, authors, tags } = options
@@ -42,20 +51,43 @@ export function PapersPage({ allPapers, options }: PapersPageProps) {
   // Check if any filter is active
   const filtered = yearFilter !== "" || authorFilter !== "" || tagFilter !== ""
 
-  // Update URL with filters
+  // Update URL with current filter state
+  const updateURL = (newYear: string, newAuthor: string, newTag: string) => {
+    const params = new URLSearchParams()
+    
+    if (newYear) params.set("year", newYear)
+    if (newAuthor) params.set("author", newAuthor)
+    if (newTag) params.set("tag", newTag)
+    
+    const newUrl = params.toString() ? `?${params.toString()}` : window.location.pathname
+    window.history.pushState({}, '', newUrl)
+  }
+
+  // Update filters and URL
   const updateFilters = (param: string, value: string) => {
-    const params = new URLSearchParams(searchParams.toString())
-
-    if (value === "") {
-      params.delete(param)
-    } else {
-      params.set(param, value)
-    }
-
-    router.push(`?${params.toString()}`)
-
-    // Reset to page 1 when filters change
+    // Create new state values
+    const newYearFilter = param === "year" ? value : yearFilter
+    const newAuthorFilter = param === "author" ? value : authorFilter
+    const newTagFilter = param === "tag" ? value : tagFilter
+    
+    // Update all state together
+    setYearFilter(newYearFilter)
+    setAuthorFilter(newAuthorFilter)
+    setTagFilter(newTagFilter)
     setCurrentPage(1)
+    
+    // Update URL for bookmarking without page reload
+    updateURL(newYearFilter, newAuthorFilter, newTagFilter)
+  }
+
+  // Handle reset filters
+  const resetFilters = (e: React.MouseEvent) => {
+    e.preventDefault()
+    setYearFilter("")
+    setAuthorFilter("")
+    setTagFilter("")
+    setCurrentPage(1)
+    window.history.pushState({}, '', window.location.pathname)
   }
 
   // Filter papers based on selected filters
@@ -156,15 +188,15 @@ export function PapersPage({ allPapers, options }: PapersPageProps) {
         </select>
 
         <div className="col-start-3 row-start-1 max-lg:text-end lg:col-start-5">
-          <Link
-            href="?"
+          <button
+            onClick={resetFilters}
             className={cn(
               "text-primary invisible hover:underline",
               filtered && "visible"
             )}
           >
             Reset
-          </Link>
+          </button>
         </div>
       </div>
       <div>
